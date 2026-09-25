@@ -12,40 +12,104 @@
 
 ---
 
-## 🌟 Overview: Beyond "Chat with PDF" Black Boxes
+## 🌟 How It Works (At a Glance)
 
-Most RAG tutorials and portfolio repositories treat retrieval as a black box: a file goes in, an LLM answers. 
+Most RAG tutorials treat document retrieval like a black box: *you upload a file, and an AI magically chats with it*. 
 
-**NexusRAG** makes the entire RAG lifecycle **visible, inspectable, and production-engineered**. Every stage of the pipeline exposes real-time telemetry, before-and-after states, intermediate retrieval candidate pools, and verifiable provenance:
+In production, black-box RAG often hallucinates, misses exact numbers (like a GPA or financial revenue), or produces messy paragraph dumps. **NexusRAG** solves this with a **complete 2-phase lifecycle**:
 
-```text
-Document Upload (PDF / TXT / MD)
-      ↓
-Document Parsing & Text Extraction
-      ↓
-Text Cleaning & Normalization (Regex, Artifacts, Spacing)
-      ↓
-Semantic Chunking (Recursive Boundary Splitting + Overlap)
-      ↓
-Metadata Provenance (Doc ID, Page, Chunk ID, Token Estimate)
-      ↓
-Dense Vector Embeddings (384-d HuggingFace / MiniLM)
-      ↓
-Hybrid Vector & Lexical Indexing (ChromaDB + BM25 Okapi)
-      ↓
-AI Document Analysis & Targeted Question Synthesis
-      ↓
-Query Optimization & Reformulation
-      ↓
-Hybrid Retrieval (Dense Semantic + Sparse Lexical via RRF)
-      ↓
-Cross-Encoder Reranking (FlashRank CPU Scoring)
-      ↓
-Context Assembly & Deduplication
-      ↓
-Grounded LLM Generation (Groq LPU Ultra-Fast Streaming)
-      ↓
-Direct Natural Language Answer & Verified Citations
+```mermaid
+flowchart TD
+    classDef upload fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef process fill:#1e293b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;
+    classDef storage fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#f8fafc;
+    classDef search fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#f8fafc;
+    classDef answer fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc;
+
+    subgraph PHASE1 ["📦 PHASE 1: Document Ingestion (How Your Document Is Prepared)"]
+        direction TB
+        A["📄 1. Upload File: User uploads a Resume, Paper, or Financial Report"]:::upload
+        B["🧹 2. Read & Clean: Extract clean text and strip out messy whitespace"]:::process
+        C["✂️ 3. Semantic Chunking: Break document into organized, bite-sized sections"]:::process
+        D["🧬 4. AI Embeddings: Convert each section into 384-dimensional concept vectors"]:::process
+        E["🗄️ 5. Smart Indexing: Save into ChromaDB Vector Store + BM25 Keyword Search"]:::storage
+        F["💡 6. Auto-Generate Questions: AI reads content and creates 4 tailored questions"]:::storage
+        A --> B --> C --> D --> E --> F
+    end
+
+    subgraph PHASE2 ["💬 PHASE 2: Live Chat & Answering (How NexusRAG Answers Accurately)"]
+        direction TB
+        G["🙋 1. User Asks: 'What is Karthik's CGPA and college degree?'"]:::search
+        H["🔍 2. Hybrid Retrieval: Searches both conceptual meaning and exact keywords"]:::search
+        I["🎯 3. Cross-Encoder Rerank: Grades evidence to select the top 4 best matches"]:::search
+        J["⚡ 4. Groq Ultra-Fast AI: Reads verified proof and writes a direct natural answer"]:::answer
+        K["✅ 5. Grounded Response: 'CGPA is 8.41' with page numbers and exact citations"]:::answer
+        G --> H --> I --> J --> K
+    end
+
+    F -. "Document is ready! User starts chatting" .-> G
+```
+
+---
+
+## ⚡ The 7-Stage Live Ingestion Flowchart
+
+When you upload or select a document, NexusRAG does not show a blank loading spinner. Instead, it displays an **interactive 7-stage flowchart** in the UI that lights up stage-by-stage as your document is processed:
+
+```mermaid
+flowchart LR
+    classDef stage fill:#0f172a,stroke:#10b981,stroke-width:2px,color:#f8fafc;
+
+    S1["📥 STAGE 01<br/><b>Ingestion</b><br/>Validate PDF/TXT"]:::stage
+    S2["📄 STAGE 02<br/><b>Parsing</b><br/>Extract Text & Pages"]:::stage
+    S3["🧹 STAGE 03<br/><b>Cleaning</b><br/>Strip Noise & Artifacts"]:::stage
+    S4["✂️ STAGE 04<br/><b>Chunking</b><br/>Recursive Split (800/120)"]:::stage
+    S5["🧬 STAGE 05<br/><b>Embeddings</b><br/>MiniLM 384-d Vectors"]:::stage
+    S6["🗄️ STAGE 06<br/><b>Hybrid Index</b><br/>ChromaDB + BM25"]:::stage
+    S7["💡 STAGE 07<br/><b>AI Questions</b><br/>4 Tailored Questions"]:::stage
+
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
+```
+
+### What Happens at Each Stage (In Simple Terms):
+
+| Stage | Name | What It Does | Why It Matters |
+| :---: | :--- | :--- | :--- |
+| **01** | **Ingestion** | Reads and verifies the file bytes (PDF, TXT, MD). | Ensures corrupt or unsupported files fail fast before wasting compute. |
+| **02** | **Parsing** | Extracts raw text and preserves original page boundaries. | Enables precise citations (e.g. knowing a fact was found on Page 2). |
+| **03** | **Cleaning** | Normalizes line breaks, whitespace, and Unicode artifacts. | Prevents messy formatting from diluting vector search quality. |
+| **04** | **Chunking** | Splits text into overlapping 800-character segments. | LLMs have finite context; chunks isolate facts without losing context. |
+| **05** | **Embeddings** | Converts text chunks into mathematical vectors (384-d). | Allows the computer to understand the semantic *meaning* of words. |
+| **06** | **Hybrid Index** | Writes to ChromaDB (vector) and BM25 (keyword index). | Combines conceptual search with exact keyword and number matching. |
+| **07** | **AI Questions** | Groq AI scans the document and synthesizes 4 smart questions. | Users immediately know what to ask based on the specific document. |
+
+---
+
+## 🔍 How Hybrid Search & Reranking Prevents Hallucinations
+
+Standard RAG systems rely solely on vector search, which often misses exact figures (like a specific CGPA, date, or revenue number). NexusRAG implements **Dense + Sparse Hybrid Search with Cross-Encoder Reranking**:
+
+```mermaid
+flowchart TD
+    classDef input fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef search fill:#1e293b,stroke:#818cf8,stroke-width:2px,color:#f8fafc;
+    classDef merge fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#f8fafc;
+    classDef rerank fill:#1e293b,stroke:#ec4899,stroke-width:2px,color:#f8fafc;
+    classDef final fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc;
+
+    Q["User Question: 'What is his CGPA?'"]:::input --> OPT["Query Optimizer<br/>Strips conversational filler and identifies core entities"]:::input
+
+    OPT --> D1["Dense Semantic Search (ChromaDB)<br/>Finds conceptually similar paragraphs"]:::search
+    OPT --> D2["Sparse Lexical Search (BM25)<br/>Finds exact matches for 'CGPA', numbers, and keywords"]:::search
+
+    D1 --> RRF["Reciprocal Rank Fusion (RRF)<br/>Merges and scores both search pools together"]:::merge
+    D2 --> RRF
+
+    RRF --> CE["Cross-Encoder Reranker (FlashRank)<br/>Reads query + candidates together to eliminate noisy chunks"]:::rerank
+
+    CE --> TOP["Top 4 Verified Evidence Chunks"]:::final
+    TOP --> GROQ["Groq LPU Inference (Qwen-27B)<br/>Generates direct answer strictly from verified evidence"]:::final
+    GROQ --> OUT["Natural Answer: 'His CGPA is 8.41.'<br/>+ Clickable Page Citations"]:::final
 ```
 
 ---
@@ -59,27 +123,7 @@ Direct Natural Language Answer & Verified Citations
   - 🔬 **AI Research Paper** — *'Attention Is All You Need' (Transformer Architecture)*
   - 📊 **Annual Financial Report** — *TechCorp ($4.2B Revenue • Segment Margins)*
 
-### 2. ⚡ Live Interactive Lifecycle Flowchart
-Rather than generic loading spinners, NexusRAG renders a visual, interactive 7-stage pipeline flowchart directly in the UI as your document is processed:
-
-```text
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ STAGE 01        │     │ STAGE 02        │     │ STAGE 03        │     │ STAGE 04        │
-│ 📥 Ingestion    │ ──➔ │ 📄 Parsing      │ ──➔ │ 🧹 Cleaning     │ ──➔ │ ✂️ Chunking     │
-│ Validated ✓     │     │ 2 Pages ✓       │     │ 1,450 Chars ✓   │     │ 8 Chunks ✓      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                                                 │
-                                                                                 ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ STAGE 07        │     │ STAGE 06        │     │ STAGE 05        │
-│ 💡 AI Questions │ ◄── │ 🗄️ Hybrid Index │ ◄── │ 🧬 Embeddings   │
-│ 4 Ready ✓       │     │ Chroma + BM25 ✓ │     │ MiniLM 384-d ✓  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
-- Each stage pulses with a glowing blue indicator while running, and transitions to an emerald green badge `✓` displaying live execution metrics upon completion.
-- You can collapse or expand this flowchart anytime at the top of the chat screen.
-
-### 3. 💡 Dynamic, Content-Tailored Suggested Questions
+### 2. 💡 Dynamic, Content-Tailored Suggested Questions
 No more generic questions like *"What is the company's financial growth?"* when you upload a resume!
 - Once a document is ingested, our `DocumentQuestionSuggester` analyzes the content using Groq (`qwen/qwen3.8-27b`).
 - **If you upload a resume**, it automatically generates tailored question pills:
@@ -90,56 +134,18 @@ No more generic questions like *"What is the company's financial growth?"* when 
 - **If you upload a research paper**, it asks about attention formulas, architecture differences, and experimental BLEU benchmarks.
 - Clicking any suggested question immediately populates the chat and runs the RAG pipeline!
 
-### 4. 🔍 Complete Hybrid Retrieval & Reranking
-- **Query Optimization:** Translates conversational user phrasing into a high-density keyword query.
-- **Dense Vector Search:** ChromaDB cosine-space search capturing deep semantic concepts and synonyms.
-- **Sparse Lexical Search:** BM25 Okapi inverted indexing matching exact entities, numbers, acronyms, and formulas.
-- **Reciprocal Rank Fusion (RRF):** Merges dense and sparse candidates with a reciprocal rank score:
-  $$RRF\_Score(d) = \sum_{m \in M} \frac{1}{k + rank_m(d)}$$
-- **FlashRank Cross-Encoder Reranker:** Evaluates query-document pairs simultaneously using a lightweight CPU cross-encoder model to prune noisy candidates down to the top-4 most relevant chunks.
-
-### 5. 💬 Grounded Natural Language Chat
+### 3. 💬 Grounded Natural Language Chat
 - **Direct & Conversational:** Powered by Groq's high-speed inference engine (`qwen/qwen3.8-27b`), producing clean, natural language answers without raw chunk dumps.
   - *Example Query:* "what is his cgpa"
   - *Direct Answer:* **"Karthik Katta graduated from VNR Vignana Jyothi Institute of Engineering and Technology with a CGPA of 8.41."**
 - **Verified Citations:** Every response includes collapsible source references with document name, page numbers, match relevance scores, and verbatim excerpts.
 - **Transparent RAG Lifecycle Trace:** Expandable trace revealing rewritten queries, candidate pool sizes, and reranked selections.
 
-### 6. 📂 Full Document CRUD (Create, Read, Update, Delete)
+### 4. 📂 Full Document CRUD (Create, Read, Update, Delete)
 - **Create / Add:** Drag and drop new documents or load sample benchmarks anytime.
 - **Read / List:** The sidebar actively displays all indexed documents with page and chunk counts.
 - **Delete / Remove:** Individual `🗑️` delete buttons remove a document's vectors from ChromaDB and dynamically rebuild the BM25 index. Includes a **Clear All Knowledge** button.
 - **Inspect Chunks:** An expandable chunk inspector lets you examine chunk text, token counts, and metadata payloads under the hood.
-
----
-
-## 🏛️ System Architecture
-
-```text
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Streamlit Executive UI                          │
-│   [Hero Upload / Samples] ──➔ [RAG Flowchart] ──➔ [Grounded Chat]     │
-└──────────────────────────────────┬─────────────────────────────────────┘
-                                   │
-                    ┌──────────────┴──────────────┐
-                    ▼                             ▼
-       ┌────────────────────────┐    ┌────────────────────────┐
-       │   Ingestion Pipeline   │    │  Retrieval & Synthesis │
-       │  • DocumentLoader      │    │  • QueryRewriter       │
-       │  • TextCleaner         │    │  • SemanticRetriever   │
-       │  • Chunker (Recursive) │    │  • BM25Retriever       │
-       │  • MetadataEnricher    │    │  • Hybrid (RRF Merger) │
-       │  • QuestionSuggester   │    │  • FlashRank Reranker  │
-       └───────────┬────────────┘    │  • AnswerGenerator     │
-                   │                 └────────────┬───────────┘
-                   ▼                              │
-       ┌────────────────────────┐                 │
-       │     Indexing Layer     │                 │
-       │  • EmbeddingManager    │◄────────────────┘
-       │  • Chroma VectorStore  │
-       │  • BM25 Inverted Index │
-       └────────────────────────┘
-```
 
 ---
 
