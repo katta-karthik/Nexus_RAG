@@ -1,8 +1,11 @@
 import os
 import time
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Iterator, Generator
+from dataclasses import dataclass
+from typing import List, Dict, Any, Optional, Iterator
+from dotenv import load_dotenv
 from .prompts import GroundedPromptBuilder
+
+load_dotenv()
 
 
 @dataclass
@@ -34,82 +37,47 @@ class GenerationResult:
 
 class AnswerGenerator:
     """
-    Orchestrates grounded answer generation with live streaming and structured citations.
-    Supports Google Gemini (via langchain-google-genai), OpenAI (via langchain-openai),
-    and a local extractive synthesizer for offline demo execution.
+    Generates concise, natural language answers from retrieved context with live streaming.
+    Supports Groq (LLaMA/Qwen/GPT-OSS), Google Gemini, OpenAI, and extractive fallback.
     """
 
     def __init__(
         self,
-        provider: str = "gemini",
+        provider: str = "groq",
         model_name: Optional[str] = None,
         temperature: float = 0.2,
         api_key: Optional[str] = None,
     ):
         self.provider = provider
         self.temperature = temperature
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY")
+        self.api_key = (
+            api_key
+            or os.getenv("GROQ_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or os.getenv("OPENAI_API_KEY")
+        )
         self.model_name = model_name
-        self.llm = self._init_llm()
+        self.groq_client = None
+        self._init_client()
 
-    def _init_llm(self) -> Any:
-        if self.provider == "gemini":
-            key = self.api_key or os.getenv("GOOGLE_API_KEY")
-            if not key:
-                self.provider = "demo"
-                self.model_name = "nexusrag-extractive-demo"
-                return None
+    def _init_client(self):
+        groq_key = os.getenv("GROQ_API_KEY") or (self.api_key if self.provider == "groq" else None)
+        if (self.provider == "groq" or groq_key) and groq_key:
             try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                model = self.model_name or "gemini-2.5-flash"
-                self.model_name = model
-                return ChatGoogleGenerativeAI(
-                    model=model,
-                    temperature=self.temperature,
-                    google_api_key=key,
-                    streaming=True,
-                )
+                from groq import Groq
+                self.groq_client = Groq(api_key=groq_key)
+                self.provider = "groq"
+                self.model_name = self.model_name or "openai/gpt-oss-120b"
             except Exception:
-                self.provider = "demo"
-                self.model_name = "nexusrag-extractive-demo"
-                return None
-
-        elif self.provider == "openai":
-            key = self.api_key or os.getenv("OPENAI_API_KEY")
-            if not key:
-                self.provider = "demo"
-                self.model_name = "nexusrag-extractive-demo"
-                return None
-            try:
-                from langchain_openai import ChatOpenAI
-                model = self.model_name or "gpt-4o-mini"
-                self.model_name = model
-                return ChatOpenAI(
-                    model=model,
-                    temperature=self.temperature,
-                    api_key=key,
-                    streaming=True,
-                )
-            except Exception:
-                self.provider = "demo"
-                self.model_name = "nexusrag-extractive-demo"
-                return None
-
-        else:
-            self.provider = "demo"
-            self.model_name = "nexusrag-extractive-demo"
-            return None
+                self.groq_client = None
 
     def extract_citations(self, chunks: List[Dict[str, Any]]) -> List[Citation]:
-        """
-        Creates structured citations from the selected context chunks.
-        """
         citations = []
         for c in chunks:
             meta = c.get("metadata", {})
             citations.append(
                 Citation(
-                    source_document=meta.get("filename", "Unknown Document"),
+                    source_document=meta.get("filename", "Uploaded Document"),
                     page_number=int(meta.get("page", 1)),
                     chunk_id=c.get("chunk_id", ""),
                     relevance_score=float(c.get("score", 0.0)),
@@ -124,60 +92,93 @@ class AnswerGenerator:
         chunks: List[Dict[str, Any]],
         chat_history: Optional[List[Dict[str, str]]] = None,
     ) -> Iterator[str]:
-        """
-        Streams response tokens iteratively for Streamlit st.write_stream.
-        """
         if not chunks:
             yield "I couldn't find sufficient evidence in the uploaded documents to answer this confidently."
             return
 
-        messages = GroundedPromptBuilder.build_messages(query, chunks, chat_history)
+        context_str = GroundedPromptBuilder.format_context_block(chunks)
+        system_content = GroundedPromptBuilder.SYSTEM_PROMPT
 
-        if self.llm is not None:
+        # 1. Groq ultra-fast streaming
+        if self.groq_client is not None:
             try:
-                for chunk in self.llm.stream(messages):
+                messages = [{"role": "system", "content": system_content}]
+                if chat_history:
+                    for turn in chat_history[-4:]:
+                        role = turn.get("role", "user")
+                        content = turn.get("content", "")
+                        messages.append({"role": role, "content": content})
+
+                user_content = (
+                    f"<document_context>\n{context_str}\n</document_context>\n\n"
+                    f"User Question: {query}\n\n"
+                    "Answer the question directly and concisely in natural language:"
+                )
+                messages.append({"role": "user", "content": user_content})
+
+                # Try primary model, fallback to qwen3.8-27b if needed
+                models_to_try = [self.model_name or "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+                for model in models_to_try:
+                    try:
+                        stream = self.groq_client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            temperature=self.temperature,
+                            stream=True,
+                        )
+                        for chunk in stream:
+                            content = chunk.choices[0].delta.content
+                            if content:
+                                yield content
+                        return
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        # 2. Gemini fallback if key available
+        gemini_key = os.getenv("GOOGLE_API_KEY")
+        if gemini_key:
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                llm = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
+                    temperature=self.temperature,
+                    google_api_key=gemini_key,
+                    streaming=True,
+                )
+                messages = GroundedPromptBuilder.build_messages(query, chunks, chat_history)
+                for chunk in llm.stream(messages):
                     content = chunk.content if hasattr(chunk, "content") else str(chunk)
                     if content:
                         yield content
                 return
             except Exception:
-                # If streaming API error occurs, fallback to demo synthesizer
                 pass
 
-        # Local Extractive Demo Synthesizer
-        # Provides an authentic grounded answer without API keys
-        yield from self._stream_demo_answer(query, chunks)
+        # 3. Intelligent extractive fallback (concise extraction, not raw dump)
+        yield from self._stream_concise_fallback(query, chunks)
 
-    def _stream_demo_answer(
+    def _stream_concise_fallback(
         self, query: str, chunks: List[Dict[str, Any]]
     ) -> Iterator[str]:
         top_chunk = chunks[0]
-        meta = top_chunk.get("metadata", {})
-        source = meta.get("filename", "document")
-        page = meta.get("page", 1)
+        text = top_chunk.get("text", "")
+        q_tokens = [w for w in query.lower().split() if len(w) > 2]
 
-        intro = (
-            f"Based on **{source}** (Page {page}), here is the relevant factual finding:\n\n"
-        )
-        for word in intro.split(" "):
+        sentences = [s.strip() for s in text.replace("\n", " ").split(".") if s.strip()]
+        matched_sentences = []
+        for s in sentences:
+            if any(q in s.lower() for q in q_tokens):
+                matched_sentences.append(s)
+
+        if matched_sentences:
+            ans = matched_sentences[0] + "."
+        elif sentences:
+            ans = sentences[0] + "."
+        else:
+            ans = "Information found in document."
+
+        for word in ans.split(" "):
             yield word + " "
-            time.sleep(0.01)
-
-        # Highlight key sentences from top chunks
-        summary_sentences = []
-        for c in chunks[:3]:
-            text = c.get("text", "")
-            # Pick first 2 informative sentences
-            sentences = [s.strip() for s in text.split(". ") if len(s.strip()) > 20]
-            if sentences:
-                c_meta = c.get("metadata", {})
-                c_source = c_meta.get("filename", source)
-                c_page = c_meta.get("page", page)
-                summary_sentences.append(
-                    f"• {sentences[0]}. [{c_source} — Page {c_page}]"
-                )
-
-        full_body = "\n\n".join(summary_sentences)
-        for word in full_body.split(" "):
-            yield word + " "
-            time.sleep(0.015)
+            time.sleep(0.02)

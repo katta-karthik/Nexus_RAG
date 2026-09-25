@@ -180,11 +180,20 @@ with st.sidebar:
     st.markdown("#### 🔑 Model & API Key (Optional)")
     provider_choice = st.selectbox(
         "Provider",
-        options=["Google Gemini (Recommended)", "OpenAI", "Local Extractive (Offline Demo)"],
-        index=0 if os.getenv("GOOGLE_API_KEY") else (1 if os.getenv("OPENAI_API_KEY") else 2),
+        options=["Groq (Blazing Fast)", "Google Gemini", "OpenAI", "Local Extractive (Offline Demo)"],
+        index=0 if os.getenv("GROQ_API_KEY") else (1 if os.getenv("GOOGLE_API_KEY") else (2 if os.getenv("OPENAI_API_KEY") else 3)),
     )
 
-    if "Gemini" in provider_choice:
+    if "Groq" in provider_choice:
+        groq_key = st.text_input(
+            "Groq API Key",
+            value=os.getenv("GROQ_API_KEY", ""),
+            type="password",
+            help="High-speed inference on Groq",
+        )
+        if groq_key:
+            os.environ["GROQ_API_KEY"] = groq_key
+    elif "Gemini" in provider_choice:
         gemini_key = st.text_input(
             "Gemini API Key",
             value=os.getenv("GOOGLE_API_KEY", ""),
@@ -382,7 +391,7 @@ with tab_chat:
                     status_widget.update(label="✅ Evidence verified. Generating grounded answer...", state="complete")
 
                 # Stage D: Grounded Streaming Generation
-                provider_tag = "gemini" if "Gemini" in provider_choice else ("openai" if "OpenAI" in provider_choice else "demo")
+                provider_tag = "groq" if "Groq" in provider_choice else ("gemini" if "Gemini" in provider_choice else ("openai" if "OpenAI" in provider_choice else "demo"))
                 generator = AnswerGenerator(provider=provider_tag, temperature=0.2)
                 stream_gen = generator.stream_answer(
                     query_to_run, selected_chunks, st.session_state.chat_history[:-1]
@@ -455,7 +464,7 @@ with tab_eval:
             )
             keyword_retriever = st.session_state.keyword_retriever
             hybrid_retriever = HybridRetriever(semantic_retriever, keyword_retriever)
-            provider_tag = "gemini" if "Gemini" in provider_choice else ("openai" if "OpenAI" in provider_choice else "demo")
+            provider_tag = "groq" if "Groq" in provider_choice else ("gemini" if "Gemini" in provider_choice else ("openai" if "OpenAI" in provider_choice else "demo"))
             eval_generator = AnswerGenerator(provider=provider_tag, temperature=0.1)
 
             evaluator = RAGEvaluator(
