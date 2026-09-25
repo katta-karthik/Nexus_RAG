@@ -311,11 +311,24 @@ with st.sidebar:
             st.caption("Upload a document first to inspect chunks.")
 
     with st.expander("⚙️ Inference Engine", expanded=False):
-        st.caption("Engine: Groq High-Speed LPU")
-        gkey = st.text_input("Groq API Key", value=os.getenv("GROQ_API_KEY", ""), type="password")
-        if gkey:
-            os.environ["GROQ_API_KEY"] = gkey
-        st.caption("Model: `qwen/qwen3.8-27b` (Ultra-low latency)")
+        has_server_key = bool(os.getenv("GROQ_API_KEY"))
+        if has_server_key:
+            st.markdown(
+                """
+                <div style="font-size: 0.84rem; color: #10b981; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <span>●</span> Groq LPU Connected & Secured
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.caption("Engine: `qwen/qwen3.8-27b` (High-Speed LPU Inference)")
+            st.caption("🔒 Key is securely stored on the server and never exposed to the client.")
+        else:
+            st.caption("Engine: Offline / Deterministic Mode")
+            custom_key = st.text_input("Enter Groq API Key (Optional)", type="password", placeholder="gsk_...")
+            if custom_key:
+                os.environ["GROQ_API_KEY"] = custom_key
+                st.success("API key loaded for this session.")
 
 
 # ==========================================
