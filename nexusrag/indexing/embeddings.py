@@ -131,6 +131,10 @@ class EmbeddingManager:
     def embed_query(self, text: str) -> List[float]:
         return self._embedder.embed_query(text)
 
+    def embed_documents(self, texts: List[str], batch_size: int = 16) -> List[List[float]]:
+        """Embeds a list of texts in batches."""
+        return self.embed_documents_with_progress(texts, batch_size=batch_size)
+
     def embed_documents_with_progress(
         self,
         texts: List[str],
