@@ -378,7 +378,8 @@ if not has_active_docs or st.session_state.show_uploader:
 # Primary Screen View
 # Case B: Document Ingested -> Clean Chat Screen
 # ==========================================
-active_doc_name = st.session_state.active_document or list(st.session_state.documents_registry.keys())[0]
+reg_docs = list(st.session_state.documents_registry.keys())
+active_doc_name = st.session_state.active_document or (reg_docs[0] if reg_docs else "Document")
 doc_info = st.session_state.documents_registry.get(active_doc_name, {})
 pages_cnt = doc_info.get("pages", 1)
 chunks_cnt = doc_info.get("chunks_count", 0)

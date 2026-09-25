@@ -91,3 +91,14 @@ def render_citations(citations: List[Citation]):
                 st.caption(f"**Document:** `{cit.source_document}`")
                 st.caption(f"**Chunk ID:** `{cit.chunk_id}`")
                 st.markdown(f"> *\"{cit.excerpt}\"*")
+
+
+def render_lifecycle_pipeline(stages: List[Dict[str, Any]]):
+    """Backward-compatible wrapper rendering the lifecycle flowchart."""
+    st.markdown(render_flowchart_html(stages), unsafe_allow_html=True)
+
+
+def render_evaluation_chart(df: Any):
+    """Backward-compatible placeholder."""
+    pass
+
