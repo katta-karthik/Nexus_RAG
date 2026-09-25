@@ -1,3 +1,11 @@
+# SQLite3 fix for Streamlit Community Cloud (Linux)
+try:
+    __import__("pysqlite3")
+    import sys
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass
+
 import os
 import sys
 import time
@@ -7,6 +15,18 @@ from dotenv import load_dotenv
 
 # Ensure local packages are importable
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Load environment variables (.env file)
+load_dotenv()
+
+# Sync Streamlit Cloud secrets (Settings > Secrets) to environment if present
+try:
+    if hasattr(st, "secrets"):
+        for sec_key in ["GROQ_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"]:
+            if sec_key in st.secrets and not os.getenv(sec_key):
+                os.environ[sec_key] = str(st.secrets[sec_key])
+except Exception:
+    pass
 
 from nexusrag.ingestion.loaders import DocumentLoader, LoadedDocument
 from nexusrag.ingestion.cleaner import TextCleaner
@@ -25,8 +45,6 @@ from nexusrag.ui.styles import get_custom_css
 from nexusrag.ui.flowchart import render_flowchart_html
 from nexusrag.ui.components import render_header, render_active_doc_bar, render_chunk_card, render_citations
 
-# Load environment variables
-load_dotenv()
 
 # Streamlit Page Setup
 st.set_page_config(
