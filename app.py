@@ -314,64 +314,73 @@ has_active_docs = len(st.session_state.documents_registry) > 0
 if not has_active_docs or st.session_state.show_uploader:
     st.markdown(
         """
-        <div class="hero-upload-card">
-            <div class="upload-icon">📄</div>
-            <h2 style="font-size: 1.5rem; font-weight: 800; color: #f8fafc; margin-bottom: 6px;">
-                Upload Your Document to Run the RAG Lifecycle
-            </h2>
-            <p style="font-size: 0.95rem; color: #94a3b8; max-width: 600px; margin: 0 auto 16px auto;">
-                NexusRAG will parse, clean, chunk, embed, and index your document live through the full RAG lifecycle, then generate instant questions tailored specifically to your content.
-            </p>
+        <div style="background: linear-gradient(180deg, #0f172a 0%, #0b1120 100%); border: 1px solid #1e293b; border-radius: 16px; padding: 28px 32px; margin-bottom: 24px;">
+            <div style="font-size: 1.35rem; font-weight: 800; color: #f8fafc; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+                <span>📥</span> Upload Document to Run RAG Lifecycle
+            </div>
+            <div style="font-size: 0.92rem; color: #94a3b8; margin-bottom: 18px;">
+                Drop your PDF, TXT, or Markdown document. NexusRAG will parse, clean, chunk, embed, and index it live with full provenance.
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    col_upload, col_samples = st.columns([1.1, 0.9], gap="large")
+    uploaded_file = st.file_uploader(
+        "Upload your document (PDF, TXT, MD):",
+        type=["pdf", "txt", "md"],
+        help="Upload resumes, research papers, legal documents, reports, etc.",
+        label_visibility="collapsed",
+    )
 
-    with col_upload:
-        st.markdown("#### 📤 Upload Any File")
-        uploaded_file = st.file_uploader(
-            "Drop your PDF, TXT, or Markdown document:",
-            type=["pdf", "txt", "md"],
-            help="Resumes, research papers, legal agreements, manuals, financial reports.",
-        )
-        if uploaded_file is not None:
-            if st.button(f"⚡ Run RAG Lifecycle on '{uploaded_file.name}'", type="primary", use_container_width=True):
-                run_rag_lifecycle(uploaded_file.getvalue(), uploaded_file.name)
-                st.rerun()
+    if uploaded_file is not None:
+        if st.button(f"⚡ Ingest & Run RAG Lifecycle on '{uploaded_file.name}'", type="primary", use_container_width=True):
+            run_rag_lifecycle(uploaded_file.getvalue(), uploaded_file.name)
+            st.rerun()
 
-    with col_samples:
-        st.markdown("#### ✨ Or Try With a Ready Sample Document")
-        sample_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sample_docs")
+    st.markdown(
+        """
+        <div style="display: flex; align-items: center; text-align: center; margin: 24px 0 16px 0; color: #64748b; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">
+            <div style="flex: 1; border-bottom: 1px solid #1e293b;"></div>
+            <div style="padding: 0 16px;">Or Test Instantly With a Ready Sample</div>
+            <div style="flex: 1; border-bottom: 1px solid #1e293b;"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        # Sample 1: Resume
+    sample_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sample_docs")
+    s_col1, s_col2, s_col3 = st.columns(3)
+
+    with s_col1:
         c1_path = os.path.join(sample_dir, "sample_resume_karthik.txt")
         if os.path.exists(c1_path):
-            if st.button("👤 **Software Engineer Resume** — Karthik Katta (B.Tech, 8.41 CGPA)", use_container_width=True):
+            if st.button("👤 **Resume — Karthik Katta**\n\n(B.Tech CSE • 8.41 CGPA)", use_container_width=True):
                 run_rag_lifecycle(c1_path, "sample_resume_karthik.txt")
                 st.rerun()
 
-        # Sample 2: Research Paper
+    with s_col2:
         c2_path = os.path.join(sample_dir, "attention_is_all_you_need_summary.txt")
         if os.path.exists(c2_path):
-            if st.button("🔬 **AI Research Paper** — 'Attention Is All You Need'", use_container_width=True):
+            if st.button("🔬 **AI Research Paper**\n\n('Attention Is All You Need')", use_container_width=True):
                 run_rag_lifecycle(c2_path, "attention_is_all_you_need_summary.txt")
                 st.rerun()
 
-        # Sample 3: TechCorp Report
+    with s_col3:
         c3_path = os.path.join(sample_dir, "techcorp_annual_report_2025.txt")
         if os.path.exists(c3_path):
-            if st.button("📊 **Annual Financial Report** — TechCorp ($4.2B Revenue)", use_container_width=True):
+            if st.button("📊 **Annual Financial Report**\n\n(TechCorp • $4.2B Revenue)", use_container_width=True):
                 run_rag_lifecycle(c3_path, "techcorp_annual_report_2025.txt")
                 st.rerun()
 
     if has_active_docs and st.session_state.show_uploader:
-        if st.button("⬅️ Return to Chat", type="secondary"):
+        st.markdown("<div style='margin-top: 16px;'></div>", unsafe_allow_html=True)
+        if st.button("⬅️ Return to Active Chat", type="secondary"):
             st.session_state.show_uploader = False
             st.rerun()
 
     st.stop()
+
 
 
 # ==========================================
