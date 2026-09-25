@@ -1,5 +1,8 @@
 # NexusRAG — Complete RAG Lifecycle Platform
 
+[![Live App](https://img.shields.io/badge/Live_App-nexus--doc--rag.streamlit.app-FF4B4B?style=for-the-badge&logo=streamlit)](https://nexus-doc-rag.streamlit.app/)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github)](https://github.com/katta-karthik/Nexus_RAG)
+
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.42+-FF4B4B.svg)](https://streamlit.io)
 [![LangChain](https://img.shields.io/badge/LangChain-1.0+-00A67E.svg)](https://python.langchain.com)
 [![Groq](https://img.shields.io/badge/Groq-LPU_Inference-F55036.svg)](https://groq.com)
@@ -9,6 +12,8 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 > **An enterprise-grade, end-to-end RAG Lifecycle Platform demonstrating the complete retrieval-augmented generation lifecycle — from ingestion, text cleaning, and recursive chunking to hybrid dense-sparse retrieval (BM25 + ChromaDB with Reciprocal Rank Fusion), cross-encoder reranking, live lifecycle flowcharts, dynamic document-specific question synthesis, and grounded natural language chat with verifiable citations.**
+
+> 🚀 **Live Demo:** Try NexusRAG in your browser right now at **[https://nexus-doc-rag.streamlit.app/](https://nexus-doc-rag.streamlit.app/)**
 
 ---
 
@@ -193,6 +198,17 @@ Nexus_RAG/
 ├── .gitignore                  # VCS ignore rules
 └── README.md                   # Platform documentation
 ```
+
+---
+
+## 🌐 Live Web Application
+
+NexusRAG is deployed and accessible without installing anything locally:
+👉 **[https://nexus-doc-rag.streamlit.app/](https://nexus-doc-rag.streamlit.app/)**
+
+- **Instant Ingestion:** Upload your own PDF resume, research paper, or financial report.
+- **Visual Flowchart:** Watch the 7-stage RAG lifecycle execute live.
+- **Interactive Chat:** Ask questions and receive grounded, cited natural language answers.
 
 ---
 
