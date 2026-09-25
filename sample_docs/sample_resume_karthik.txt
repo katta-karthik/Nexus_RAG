@@ -1,0 +1,50 @@
+KARTHIK KATTA
+Email: karthik.katta@example.com | Phone: +91-9876543210 | Location: Hyderabad, India
+LinkedIn: linkedin.com/in/karthik-katta | GitHub: github.com/katta-karthik
+
+EDUCATION
+---------
+Bachelor of Technology in Computer Science and Engineering (B.Tech CSE)
+VNR Vignana Jyothi Institute of Engineering and Technology, Hyderabad
+Graduation: May 2025
+CGPA: 8.41 / 10.0
+
+Intermediate (Class XII) - MPC
+Narayana Junior College, Hyderabad
+Score: 96.4%
+
+TECHNICAL SKILLS
+----------------
+- Programming Languages: Python, JavaScript, TypeScript, SQL, C++
+- AI & GenAI Frameworks: LangChain, LangGraph, Deep Agents, LlamaIndex, HuggingFace Transformers
+- LLMs & APIs: Groq, OpenAI GPT-4, Google Gemini, Anthropic Claude, Ollama (Local LLaMA 3)
+- Vector Databases & Retrieval: ChromaDB, FAISS, Pinecone, BM25 Keyword Search, Cross-Encoder Reranking
+- Web & Backend: FastAPI, Streamlit, Flask, React.js, Node.js, REST APIs
+- DevOps & Tools: Docker, Git, GitHub Actions, Linux, Postman
+
+EXPERIENCE
+----------
+AI / ML Engineer Intern | NexaTech Solutions (Jan 2024 - June 2024)
+- Developed an end-to-end Enterprise RAG pipeline utilizing hybrid search (Dense vector + BM25) and FlashRank cross-encoder reranking, improving retrieval precision by 34%.
+- Integrated Groq LPU inference for ultra-fast token streaming, achieving sub-200ms time-to-first-token.
+- Built automated evaluation benchmarks testing chunking strategies (Fixed, Recursive, Semantic) and context recall.
+
+Software Developer Intern | CloudScale Systems (May 2023 - July 2023)
+- Built interactive analytics dashboards with Streamlit and FastAPI connecting to PostgreSQL.
+- Implemented asynchronous batch processing pipelines reducing data ingestion latency by 45%.
+
+FEATURED PROJECTS
+-----------------
+1. NexusRAG — Enterprise RAG Lifecycle Platform
+- Architected a full-lifecycle RAG platform implementing Document Parsing, Text Cleaning, Recursive Chunking, ChromaDB Vector Indexing, Hybrid Search with Reciprocal Rank Fusion (RRF), Cross-Encoder Reranking, and Grounded Generation with verified source citations.
+- Engineered dynamic document analysis that automatically detects document context and synthesizes targeted questions.
+
+2. E-Commerce AI Multi-Agent Analytics Platform
+- Designed an autonomous multi-agent system using LangGraph and LangChain for natural language SQL query generation, data visualization, and automated business insights.
+- Implemented human-in-the-loop validation for high-risk write operations.
+
+CERTIFICATIONS & ACHIEVEMENTS
+-----------------------------
+- DeepLearning.AI — LangChain for LLM Application Development
+- Google Cloud Certified — Associate Cloud Engineer
+- Finalist, Smart India Hackathon (SIH 2023)
