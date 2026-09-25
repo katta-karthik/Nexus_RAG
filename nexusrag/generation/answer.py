@@ -67,7 +67,7 @@ class AnswerGenerator:
                 from groq import Groq
                 self.groq_client = Groq(api_key=groq_key)
                 self.provider = "groq"
-                self.model_name = self.model_name or "openai/gpt-oss-120b"
+                self.model_name = self.model_name or "qwen/qwen3.8-27b"
             except Exception:
                 self.groq_client = None
 
@@ -116,8 +116,8 @@ class AnswerGenerator:
                 )
                 messages.append({"role": "user", "content": user_content})
 
-                # Try primary model, fallback to qwen3.8-27b if needed
-                models_to_try = [self.model_name or "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+                # Prioritize qwen3.8-27b for fast, direct, concise natural responses
+                models_to_try = [self.model_name or "qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
                 for model in models_to_try:
                     try:
                         stream = self.groq_client.chat.completions.create(

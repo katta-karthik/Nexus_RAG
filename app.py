@@ -21,25 +21,18 @@ from nexusrag.retrieval.hybrid import HybridRetriever
 from nexusrag.retrieval.query_rewrite import QueryRewriter
 from nexusrag.retrieval.reranker import Reranker
 from nexusrag.generation.answer import AnswerGenerator
-from nexusrag.evaluation.dataset import load_benchmark_samples
-from nexusrag.evaluation.evaluate import RAGEvaluator
 from nexusrag.ui.styles import get_custom_css
-from nexusrag.ui.components import (
-    render_header,
-    render_chunk_card,
-    render_citations,
-    render_evaluation_chart,
-)
+from nexusrag.ui.components import render_chunk_card, render_citations
 
 # Load environment variables
 load_dotenv()
 
 # Streamlit Page Setup
 st.set_page_config(
-    page_title="NexusRAG — Document Intelligence Platform",
+    page_title="NexusRAG — Chat With Your Documents",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown(get_custom_css(), unsafe_allow_html=True)
@@ -52,12 +45,7 @@ def init_session_state():
     if "vectorstore" not in st.session_state:
         st.session_state.vectorstore = VectorStoreManager(persist_directory="./chroma_db")
     if "embedding_manager" not in st.session_state:
-        default_provider = (
-            EmbeddingProvider.GEMINI
-            if os.getenv("GOOGLE_API_KEY")
-            else (EmbeddingProvider.OPENAI if os.getenv("OPENAI_API_KEY") else EmbeddingProvider.LOCAL)
-        )
-        st.session_state.embedding_manager = EmbeddingManager(provider=default_provider)
+        st.session_state.embedding_manager = EmbeddingManager(provider=EmbeddingProvider.LOCAL)
     if "keyword_retriever" not in st.session_state:
         st.session_state.keyword_retriever = BM25KeywordRetriever()
         existing = st.session_state.vectorstore.get_chunks_for_document(limit=1000)
@@ -71,10 +59,6 @@ def init_session_state():
         st.session_state.chat_history = []
     if "documents_registry" not in st.session_state:
         st.session_state.documents_registry = {}
-    if "active_document" not in st.session_state:
-        st.session_state.active_document = None
-    if "eval_results_df" not in st.session_state:
-        st.session_state.eval_results_df = None
 
 
 init_session_state()
@@ -85,23 +69,19 @@ if vs_stats["total_vectors"] > 0 and not st.session_state.documents_registry:
     for doc_name in vs_stats["document_names"]:
         st.session_state.documents_registry[doc_name] = {
             "filename": doc_name,
-            "status": "Indexed",
+            "status": "Ready",
             "chunks_count": "In Store",
         }
-    if not st.session_state.active_document and vs_stats["document_names"]:
-        st.session_state.active_document = vs_stats["document_names"][0]
 
 
 # ==========================================
-# Ingestion Processor (Uses Best Pre-configured Options)
+# Document CRUD Operations
 # ==========================================
-def ingest_document(source, filename: str):
+def add_document(source, filename: str):
     """
-    Ingests document with the best production settings:
-    - Recursive Character Splitting (800 chars, 120 overlap)
-    - Full text cleaning & normalization
-    - Provenance metadata enrichment
-    - Dense Chroma vector indexing + Sparse BM25 indexing
+    CRUD: Create / Add Document
+    Executes the complete RAG ingestion lifecycle:
+    Upload -> Parse -> Clean -> Chunk -> Metadata -> Embed -> Index.
     """
     status_box = st.status(f"🚀 Ingesting `{filename}` through RAG lifecycle...", expanded=True)
 
@@ -129,14 +109,14 @@ def ingest_document(source, filename: str):
         st.write(f"✓ Created {len(chunks)} contextual chunks with boundary preservation.")
         time.sleep(0.1)
 
-        # 4. Metadata
-        st.write("🏷️ **Enriching chunk provenance & hashes...**")
+        # 4. Metadata Enrichment
+        st.write("🏷️ **Attaching provenance metadata & hashes...**")
         enriched = enrich_chunks(chunks, doc_type=cleaned_doc.file_type)
         st.write(f"✓ Attached page numbers, IDs, and token estimates to all {len(enriched)} chunks.")
         time.sleep(0.1)
 
-        # 5. Embeddings & Indexing
-        st.write("🧬 **Generating embeddings & updating index...**")
+        # 5. Embeddings & Vector Indexing
+        st.write("🧬 **Generating embeddings & updating vector index...**")
         prog = st.progress(0, text="Generating embeddings...")
 
         def on_progress(completed, total, pct):
@@ -148,7 +128,7 @@ def ingest_document(source, filename: str):
         )
         prog.empty()
 
-        # Update Chroma and BM25
+        # Update Chroma and BM25 index
         st.session_state.vectorstore.add_chunks(enriched, embeddings)
         all_chunks = st.session_state.vectorstore.get_chunks_for_document(limit=2000)
         st.session_state.keyword_retriever.index_chunks(all_chunks)
@@ -159,7 +139,7 @@ def ingest_document(source, filename: str):
             expanded=False,
         )
 
-    # Update session registry
+    # Register in session state
     st.session_state.documents_registry[filename] = {
         "filename": filename,
         "pages": loaded_doc.total_pages,
@@ -167,203 +147,188 @@ def ingest_document(source, filename: str):
         "chunks_count": len(chunks),
         "status": "Ready",
     }
-    st.session_state.active_document = filename
+
+
+def remove_document(filename: str):
+    """
+    CRUD: Delete / Remove Document
+    Removes a document from Chroma vector store, updates the BM25 index, and clears registry.
+    """
+    st.session_state.vectorstore.delete_document(filename)
+    if filename in st.session_state.documents_registry:
+        del st.session_state.documents_registry[filename]
+
+    # Refresh BM25 with remaining chunks
+    remaining = st.session_state.vectorstore.get_chunks_for_document(limit=2000)
+    st.session_state.keyword_retriever.index_chunks(remaining)
+    st.success(f"Removed '{filename}' from knowledge base.")
+    st.rerun()
+
+
+def clear_all_documents():
+    """
+    CRUD: Delete All Documents
+    Clears vector database, BM25 index, and conversation history.
+    """
+    st.session_state.vectorstore.clear()
+    st.session_state.keyword_retriever.index_chunks([])
+    st.session_state.documents_registry.clear()
+    st.session_state.chat_history.clear()
+    st.success("All documents and memory cleared!")
+    st.rerun()
 
 
 # ==========================================
-# Sidebar: Settings & Document Management
+# Sidebar: Document Management (CRUD)
 # ==========================================
 with st.sidebar:
-    st.markdown("### ⚡ NexusRAG Controls")
+    st.markdown("## 📂 Document Manager")
 
-    # API Key Configuration
-    st.markdown("#### 🔑 Model & API Key (Optional)")
-    provider_choice = st.selectbox(
-        "Provider",
-        options=["Groq (Blazing Fast)", "Google Gemini", "OpenAI", "Local Extractive (Offline Demo)"],
-        index=0 if os.getenv("GROQ_API_KEY") else (1 if os.getenv("GOOGLE_API_KEY") else (2 if os.getenv("OPENAI_API_KEY") else 3)),
+    # 1. ADD / UPLOAD (Create)
+    st.markdown("### 📤 Add Document")
+    uploaded_files = st.file_uploader(
+        "Upload PDF, TXT, or MD:",
+        type=["pdf", "txt", "md"],
+        accept_multiple_files=True,
+        help="Upload resumes, reports, papers, or documentation.",
     )
+    if uploaded_files:
+        for ufile in uploaded_files:
+            if ufile.name not in st.session_state.documents_registry:
+                if st.button(f"⚡ Ingest '{ufile.name}'", key=f"ingest_{ufile.name}", type="primary", use_container_width=True):
+                    add_document(ufile.getvalue(), ufile.name)
+                    st.rerun()
 
-    if "Groq" in provider_choice:
+    # 1-Click Samples
+    with st.expander("✨ Or Try Sample Documents", expanded=False):
+        sample_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sample_docs")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📄 Paper", use_container_width=True):
+                p = os.path.join(sample_dir, "attention_is_all_you_need_summary.txt")
+                if os.path.exists(p):
+                    add_document(p, "attention_is_all_you_need_summary.txt")
+                    st.rerun()
+        with c2:
+            if st.button("📈 Report", use_container_width=True):
+                p = os.path.join(sample_dir, "techcorp_annual_report_2025.txt")
+                if os.path.exists(p):
+                    add_document(p, "techcorp_annual_report_2025.txt")
+                    st.rerun()
+
+    st.markdown("---")
+
+    # 2. READ & DELETE (List active documents with Remove button)
+    st.markdown("### 📚 Active Documents")
+    active_docs = list(st.session_state.documents_registry.keys())
+
+    if not active_docs:
+        st.info("No documents uploaded yet.")
+    else:
+        for doc_name in active_docs:
+            d_info = st.session_state.documents_registry[doc_name]
+            pages_str = f"{d_info.get('pages', 1)} pg"
+            chunks_str = f"{d_info.get('chunks_count', 'N/A')} chunks"
+
+            col_name, col_del = st.columns([3, 1])
+            with col_name:
+                st.markdown(f"**📄 {doc_name}**")
+                st.caption(f"{pages_str} • {chunks_str}")
+            with col_del:
+                if st.button("🗑️", key=f"del_{doc_name}", help=f"Remove {doc_name}"):
+                    remove_document(doc_name)
+
+        st.markdown("---")
+        if st.button("🗑️ Clear All Documents", use_container_width=True):
+            clear_all_documents()
+
+    # 3. Groq API Key
+    st.markdown("---")
+    with st.expander("🔑 LLM Settings", expanded=False):
         groq_key = st.text_input(
             "Groq API Key",
             value=os.getenv("GROQ_API_KEY", ""),
             type="password",
-            help="High-speed inference on Groq",
+            help="High-speed natural language reasoning",
         )
         if groq_key:
             os.environ["GROQ_API_KEY"] = groq_key
-    elif "Gemini" in provider_choice:
-        gemini_key = st.text_input(
-            "Gemini API Key",
-            value=os.getenv("GOOGLE_API_KEY", ""),
-            type="password",
-            help="Free key at https://aistudio.google.com/",
-        )
-        if gemini_key:
-            os.environ["GOOGLE_API_KEY"] = gemini_key
-            st.session_state.embedding_manager = EmbeddingManager(
-                provider=EmbeddingProvider.GEMINI, api_key=gemini_key
-            )
-    elif "OpenAI" in provider_choice:
-        openai_key = st.text_input(
-            "OpenAI API Key",
-            value=os.getenv("OPENAI_API_KEY", ""),
-            type="password",
-            help="Key from https://platform.openai.com/",
-        )
-        if openai_key:
-            os.environ["OPENAI_API_KEY"] = openai_key
-            st.session_state.embedding_manager = EmbeddingManager(
-                provider=EmbeddingProvider.OPENAI, api_key=openai_key
-            )
-    else:
-        st.session_state.embedding_manager = EmbeddingManager(provider=EmbeddingProvider.LOCAL)
-
-    st.markdown("---")
-    st.markdown("#### 📚 Ingested Knowledge Base")
-    cur_stats = st.session_state.vectorstore.get_stats()
-    st.write(f"**Total Documents:** `{cur_stats['unique_documents']}`")
-    st.write(f"**Total Vectors:** `{cur_stats['total_vectors']}`")
-
-    if cur_stats["document_names"]:
-        for dname in cur_stats["document_names"]:
-            st.markdown(f"• 📄 `{dname}`")
-
-    st.markdown("---")
-    if st.button("🗑️ Clear All Documents", use_container_width=True):
-        st.session_state.vectorstore.clear()
-        st.session_state.keyword_retriever.index_chunks([])
-        st.session_state.documents_registry.clear()
-        st.session_state.chat_history.clear()
-        st.session_state.active_document = None
-        st.success("Knowledge base cleared!")
-        st.rerun()
 
 
 # ==========================================
-# Main Header
+# Main Screen: Natural Language Interaction
 # ==========================================
-render_header()
-
-# ==========================================
-# Top Section: Document Upload & Sample Loader
-# ==========================================
-st.markdown("### 📤 Step 1: Upload Your Document")
-
-col_upload, col_sample = st.columns([3, 2])
-
-with col_upload:
-    uploaded_file = st.file_uploader(
-        "Upload a PDF, TXT, or Markdown document to chat with:",
-        type=["pdf", "txt", "md"],
-        help="Upload your personal report, paper, or notes. The file will be parsed and indexed automatically.",
-    )
-    if uploaded_file is not None:
-        if uploaded_file.name not in st.session_state.documents_registry:
-            if st.button(f"⚡ Ingest & Index '{uploaded_file.name}'", type="primary"):
-                ingest_document(uploaded_file.getvalue(), uploaded_file.name)
-                st.rerun()
-
-with col_sample:
-    st.markdown("**Or load a sample document in 1-click:**")
-    sample_col1, sample_col2 = st.columns(2)
-    with sample_col1:
-        if st.button("📄 Attention Paper", use_container_width=True):
-            sample_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "sample_docs",
-                "attention_is_all_you_need_summary.txt",
-            )
-            if os.path.exists(sample_path):
-                ingest_document(sample_path, "attention_is_all_you_need_summary.txt")
-                st.rerun()
-    with sample_col2:
-        if st.button("📈 Annual Report", use_container_width=True):
-            sample_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "sample_docs",
-                "techcorp_annual_report_2025.txt",
-            )
-            if os.path.exists(sample_path):
-                ingest_document(sample_path, "techcorp_annual_report_2025.txt")
-                st.rerun()
-
-st.markdown("---")
-
-# ==========================================
-# Main Interaction Tabs
-# ==========================================
-tab_chat, tab_explorer, tab_eval = st.tabs(
-    [
-        "💬 Chat with Your Documents",
-        "🔎 Document & Chunk Explorer",
-        "📊 Benchmark & Evaluation",
-    ]
+st.markdown(
+    """
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; color: #f8fafc;">
+        <div style="font-size: 1.8rem; font-weight: 800; background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            ⚡ NexusRAG — Document Intelligence
+        </div>
+        <div style="font-size: 0.95rem; color: #94a3b8; margin-top: 4px;">
+            Upload your documents, ask anything in plain natural language, and get direct, grounded answers backed by full RAG lifecycle retrieval.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
+tab_chat, tab_chunks = st.tabs(["💬 Chat with Documents", "🔎 Inspect Document Chunks"])
+
 
 # ==========================================
-# TAB 1: CHAT WITH DOCUMENTS (PRIMARY USER EXPERIENCE)
+# TAB 1: NATURAL LANGUAGE CHAT
 # ==========================================
 with tab_chat:
     active_docs = list(st.session_state.documents_registry.keys())
 
     if not active_docs:
-        st.info("👋 **Welcome!** Please upload a document above or click one of the sample buttons to start chatting.")
+        st.info("👈 **Get started:** Upload a document using the left sidebar (or click a sample document) to begin asking questions.")
     else:
-        st.markdown(
-            f"**Active Knowledge Base:** `{len(active_docs)} document(s)` ready "
-            f"({', '.join([f'📄 {d}' for d in active_docs[:3]])})"
-        )
+        st.caption(f"🟢 **Ready to chat** with {len(active_docs)} document(s): {', '.join([f'`{d}`' for d in active_docs])}")
 
-        # Quick Suggested Questions for instant gratification
-        st.markdown("💡 **Try asking:**")
-        sug_cols = st.columns(3)
+        # Quick Suggested Prompts
+        st.markdown("💡 **Suggestions:**")
+        s_cols = st.columns(3)
         sample_prompts = [
-            "What are the primary conclusions or findings?",
-            "What methodology or approach was used?",
-            "What are the major limitations or risks identified?",
+            "What are the main findings or summary?",
+            "What is his education, CGPA, and background?",
+            "What projects or experience are mentioned?",
         ]
-        clicked_prompt = None
-        for i, prompt in enumerate(sample_prompts):
-            with sug_cols[i]:
-                if st.button(prompt, key=f"sug_{i}", use_container_width=True):
-                    clicked_prompt = prompt
+        chosen_prompt = None
+        for i, p_text in enumerate(sample_prompts):
+            with s_cols[i]:
+                if st.button(p_text, key=f"quick_{i}", use_container_width=True):
+                    chosen_prompt = p_text
 
-        # Display Conversation History
+        # Render Conversation
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 if msg.get("citations"):
                     render_citations(msg["citations"])
-                # Show inspection details if available
-                if msg.get("debug_info"):
-                    with st.expander("🔬 See How RAG Found This Answer", expanded=False):
-                        dbg = msg["debug_info"]
-                        st.markdown(f"**Query Rewritten for Search:** `{dbg.get('rewritten_query')}`")
-                        st.markdown(
-                            f"**Candidates Retrieved:** `{dbg.get('candidate_count')}` "
-                            f"(Merged from Dense Semantic + Sparse BM25 via RRF)"
-                        )
-                        st.markdown(f"**Top Chunks Used:** `{dbg.get('top_chunks_count')}` after Cross-Encoder Reranking")
+                if msg.get("trace"):
+                    with st.expander("🔬 How RAG Found This Answer (Lifecycle Trace)", expanded=False):
+                        tr = msg["trace"]
+                        st.markdown(f"**Query Rewritten for Search:** `{tr.get('rewritten_query')}`")
+                        st.markdown(f"**Hybrid Search:** Found `{tr.get('candidate_count')}` candidates (Dense Vectors + BM25 Lexical)")
+                        st.markdown(f"**Cross-Encoder Rerank:** Filtered down to top `{tr.get('top_count')}` chunks for answer generation")
 
         # Chat Input
-        user_input = st.chat_input("Ask a question about your uploaded document...")
-        query_to_run = user_input or clicked_prompt
+        user_input = st.chat_input("Ask any question about your document in natural language...")
+        query_to_run = user_input or chosen_prompt
 
         if query_to_run:
-            # 1. Record user message
+            # Add user message
             st.session_state.chat_history.append({"role": "user", "content": query_to_run})
             with st.chat_message("user"):
                 st.markdown(query_to_run)
 
-            # 2. Assistant execution
+            # Assistant response
             with st.chat_message("assistant"):
-                status_widget = st.status("🔍 Searching documents & reranking context...", expanded=True)
+                status_box = st.status("🔍 Searching document evidence...", expanded=True)
 
-                with status_widget:
-                    # Best Retrieval Setup
+                with status_box:
+                    # Retrievers
                     semantic_retriever = SemanticRetriever(
                         st.session_state.vectorstore, st.session_state.embedding_manager
                     )
@@ -372,43 +337,40 @@ with tab_chat:
                     query_rewriter = st.session_state.query_rewriter
                     reranker = st.session_state.reranker
 
-                    # Stage A: Query Rewriting
+                    # 1. Query Rewrite
                     rewritten = query_rewriter.rewrite(query_to_run)
-                    st.write(f"✓ **Optimized Query:** `{rewritten}`")
+                    st.write(f"✓ **Analyzed Query:** `{rewritten}`")
 
-                    # Stage B: Hybrid Retrieval (Dense Semantic + Sparse BM25)
+                    # 2. Hybrid Retrieval (Semantic + BM25)
                     hybrid_res = hybrid_retriever.retrieve(rewritten, top_k=8, candidate_pool_size=12)
                     st.write(
                         f"✓ **Hybrid Search:** Retrieved `{hybrid_res.merged_count}` candidates "
-                        f"({hybrid_res.semantic_count} semantic + {hybrid_res.keyword_count} keyword)."
+                        f"({hybrid_res.semantic_count} dense + {hybrid_res.keyword_count} sparse)."
                     )
 
-                    # Stage C: Cross-Encoder Reranking
+                    # 3. Cross-Encoder Reranking
                     rerank_res = reranker.rerank(rewritten, hybrid_res.merged_candidates, top_n=4)
                     selected_chunks = rerank_res.after_reranking
-                    st.write(f"✓ **Reranked:** Selected top `{len(selected_chunks)}` most relevant chunks for answer synthesis.")
+                    st.write(f"✓ **Cross-Encoder Rerank:** Verified top `{len(selected_chunks)}` most relevant chunks.")
 
-                    status_widget.update(label="✅ Evidence verified. Generating grounded answer...", state="complete")
+                    status_box.update(label="✅ Evidence verified. Generating natural language answer...", state="complete")
 
-                # Stage D: Grounded Streaming Generation
-                provider_tag = "groq" if "Groq" in provider_choice else ("gemini" if "Gemini" in provider_choice else ("openai" if "OpenAI" in provider_choice else "demo"))
-                generator = AnswerGenerator(provider=provider_tag, temperature=0.2)
+                # 4. Stream Natural Language Answer
+                generator = AnswerGenerator(provider="groq", temperature=0.2)
                 stream_gen = generator.stream_answer(
                     query_to_run, selected_chunks, st.session_state.chat_history[:-1]
                 )
 
                 full_answer = st.write_stream(stream_gen)
 
-                # Stage E: Verified Citations
+                # 5. Verified Citations
                 citations = generator.extract_citations(selected_chunks)
                 render_citations(citations)
 
-                # Store debug metadata for deep-dive inspection
-                debug_info = {
-                    "original_query": query_to_run,
+                trace_data = {
                     "rewritten_query": rewritten,
                     "candidate_count": hybrid_res.merged_count,
-                    "top_chunks_count": len(selected_chunks),
+                    "top_count": len(selected_chunks),
                 }
 
                 st.session_state.chat_history.append(
@@ -416,82 +378,27 @@ with tab_chat:
                         "role": "assistant",
                         "content": full_answer,
                         "citations": citations,
-                        "debug_info": debug_info,
+                        "trace": trace_data,
                     }
                 )
 
 
 # ==========================================
-# TAB 2: DOCUMENT & CHUNK EXPLORER
+# TAB 2: INSPECT DOCUMENT CHUNKS (READ CRUD)
 # ==========================================
-with tab_explorer:
-    st.markdown("### 🔎 Document Chunk Explorer")
-    st.markdown(
-        "See exactly how your document was segmented into chunks, "
-        "how page boundaries are tracked, and what metadata is stored in the vector database."
-    )
+with tab_chunks:
+    st.markdown("### 🔎 Inspect Ingested Chunks")
+    st.caption("Browse how your documents were parsed and split into chunks with page numbers and metadata.")
 
-    doc_names = list(st.session_state.documents_registry.keys())
-    if doc_names:
-        selected_doc = st.selectbox("Select Document:", options=doc_names)
-        if selected_doc:
-            doc_chunks = st.session_state.vectorstore.get_chunks_for_document(
-                filename=selected_doc, limit=25
+    doc_list = list(st.session_state.documents_registry.keys())
+    if doc_list:
+        chosen_doc = st.selectbox("Select Document to Inspect:", options=doc_list)
+        if chosen_doc:
+            chunks_to_view = st.session_state.vectorstore.get_chunks_for_document(
+                filename=chosen_doc, limit=30
             )
-            st.caption(f"Showing chunks for `{selected_doc}` (Total indexed: {len(doc_chunks)} chunks):")
-            for ch in doc_chunks:
+            st.caption(f"Showing chunks for `{chosen_doc}` (Total indexed: {len(chunks_to_view)}):")
+            for ch in chunks_to_view:
                 render_chunk_card(ch)
     else:
-        st.info("No documents uploaded yet. Upload a document on the top to inspect its chunks.")
-
-
-# ==========================================
-# TAB 3: BENCHMARK & EVALUATION
-# ==========================================
-with tab_eval:
-    st.markdown("### 📊 RAG Pipeline Benchmark & Strategy Comparison")
-    st.markdown(
-        """
-        Verify that our chosen strategy (**Hybrid Search + Cross-Encoder Reranking**) 
-        actually outperforms standalone Semantic Search or Keyword Search across standardized metrics.
-        """
-    )
-
-    if st.button("🚀 Run Comparative Benchmark on Sample Dataset", type="primary"):
-        with st.spinner("Evaluating Semantic vs Keyword vs Hybrid vs Hybrid+Rerank..."):
-            semantic_retriever = SemanticRetriever(
-                st.session_state.vectorstore, st.session_state.embedding_manager
-            )
-            keyword_retriever = st.session_state.keyword_retriever
-            hybrid_retriever = HybridRetriever(semantic_retriever, keyword_retriever)
-            provider_tag = "groq" if "Groq" in provider_choice else ("gemini" if "Gemini" in provider_choice else ("openai" if "OpenAI" in provider_choice else "demo"))
-            eval_generator = AnswerGenerator(provider=provider_tag, temperature=0.1)
-
-            evaluator = RAGEvaluator(
-                semantic_retriever=semantic_retriever,
-                keyword_retriever=keyword_retriever,
-                hybrid_retriever=hybrid_retriever,
-                reranker=st.session_state.reranker,
-                generator=eval_generator,
-            )
-
-            benchmark_samples = load_benchmark_samples()
-            df_comp = evaluator.run_strategy_comparison(
-                samples=benchmark_samples, top_k=4, max_samples=6
-            )
-            st.session_state.eval_results_df = df_comp
-
-    if st.session_state.eval_results_df is not None:
-        st.markdown("#### 🏆 Measured Strategy Results")
-        st.dataframe(st.session_state.eval_results_df, use_container_width=True)
-
-        st.markdown("#### 📈 Metric Visualizations")
-        render_evaluation_chart(st.session_state.eval_results_df)
-
-        st.markdown(
-            """
-            > **Engineering Insight:** **Hybrid Search + Reranking** achieves the optimal balance — 
-            > capturing high recall via dense vectors + sparse BM25, while the cross-encoder 
-            > eliminates false positives before reaching the LLM context.
-            """
-        )
+        st.info("No documents uploaded yet.")
