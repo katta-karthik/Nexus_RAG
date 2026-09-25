@@ -210,5 +210,109 @@ def get_custom_css() -> str:
         border-color: #64748b !important;
         background: #334155 !important;
     }
+
+    /* RAG Flowchart Styles */
+    .rag-flowchart {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 12px !important;
+        align-items: stretch !important;
+        justify-content: space-between !important;
+        margin: 16px 0 20px 0 !important;
+        padding: 18px !important;
+        background: linear-gradient(145deg, #0b1120 0%, #0f172a 100%) !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 14px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3) !important;
+    }
+    .flow-node {
+        flex: 1 1 120px !important;
+        min-width: 110px !important;
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 10px !important;
+        padding: 12px 10px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        text-align: center !important;
+        transition: all 0.3s ease !important;
+    }
+    .flow-node.pending {
+        opacity: 0.45 !important;
+        border-color: #334155 !important;
+        background: #0f172a !important;
+    }
+    .flow-node.running {
+        opacity: 1 !important;
+        border-color: #38bdf8 !important;
+        background: linear-gradient(180deg, rgba(56, 189, 248, 0.12) 0%, #1e293b 100%) !important;
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
+        animation: pulse-glow 1.5s infinite !important;
+    }
+    .flow-node.completed {
+        opacity: 1 !important;
+        border-color: #10b981 !important;
+        background: linear-gradient(180deg, rgba(16, 185, 129, 0.1) 0%, #1e293b 100%) !important;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2) !important;
+    }
+    .flow-step-num {
+        font-size: 0.7rem !important;
+        font-weight: 700 !important;
+        color: #94a3b8 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+        margin-bottom: 4px !important;
+    }
+    .flow-icon {
+        font-size: 1.5rem !important;
+        margin-bottom: 6px !important;
+    }
+    .flow-title {
+        font-size: 0.82rem !important;
+        font-weight: 700 !important;
+        color: #f1f5f9 !important;
+        margin-bottom: 4px !important;
+        line-height: 1.2 !important;
+    }
+    .flow-metric {
+        font-size: 0.72rem !important;
+        color: #38bdf8 !important;
+        font-weight: 600 !important;
+        margin-top: auto !important;
+        padding-top: 4px !important;
+    }
+    .flow-status-pill {
+        font-size: 0.65rem !important;
+        padding: 2px 6px !important;
+        border-radius: 999px !important;
+        margin-top: 6px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+    }
+    .pill-pending {
+        background: rgba(148, 163, 184, 0.15) !important;
+        color: #94a3b8 !important;
+    }
+    .pill-running {
+        background: rgba(56, 189, 248, 0.2) !important;
+        color: #38bdf8 !important;
+    }
+    .pill-completed {
+        background: rgba(16, 185, 129, 0.2) !important;
+        color: #34d399 !important;
+    }
+    .flow-arrow {
+        display: flex !important;
+        align-items: center !important;
+        color: #475569 !important;
+        font-weight: bold !important;
+        font-size: 1.1rem !important;
+    }
+    @keyframes pulse-glow {
+        0% { box-shadow: 0 0 4px rgba(56, 189, 248, 0.2); }
+        50% { box-shadow: 0 0 16px rgba(56, 189, 248, 0.6); }
+        100% { box-shadow: 0 0 4px rgba(56, 189, 248, 0.2); }
+    }
     </style>
     """
